@@ -1,72 +1,76 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from fastapi.middleware.cors import CORSMiddleware
-import openai
 import os
+import traceback
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+import requests
+import base64
 
 load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
+STABILITY_API_KEY = os.getenv("STABILITY_API_KEY")
+if not STABILITY_API_KEY:
+    raise Exception("STABILITY_API_KEY environment variable not set")
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-class PromptInput(BaseModel):
-    mood: str
-    style: str
-    location: str
-    time: str
-    elements: str
-
-class ImageRequest(BaseModel):
-    prompt: str
-
-@app.post("/refine-prompt")
-async def refine_prompt(input: PromptInput):
-    try:
-        system_prompt = "You are a prompt engineer. Turn user settings into vivid, image-generation prompts."
-        user_prompt = (
-            f"Create a highly detailed visual description for an image based on the following:\n"
-            f"Mood: {input.mood}\n"
-            f"Style: {input.style}\n"
-            f"Location: {input.location}\n"
-            f"Time: {input.time}\n"
-            f"Elements: {input.elements}"
-        )
-
-        response = openai.ChatCompletion.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0.9
-        )
-        refined = response['choices'][0]['message']['content']
-        return {"refined_prompt": refined}
-    except Exception as e:
-        print("Error in refine_prompt:", e)
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @app.post("/generate-image")
-async def generate_image(req: ImageRequest):
+async def generate_image(data: dict, request: Request):
     try:
-        response = openai.Image.create(
-            model="dall-e-3",
-            prompt=req.prompt,
-            n=1,
-            size="1024x1024"
-        )
-        image_url = response['data'][0]['url']
-        return {"image_url": image_url}
+        prompt_parts = [
+            data.get("mood", "").strip(),
+            data.get("style", "").strip(),
+            data.get("location", "").strip(),
+            data.get("time", "").strip(),
+            data.get("elements", "").strip(),
+        ]
+        prompt = ", ".join(part for part in prompt_parts if part)
+        if not prompt:
+            return {"error": "Prompt data missing"}
+
+        url = "https://api.stability.ai/v2beta/stable-image/generate/ultra"
+
+        headers = {
+            "Authorization": f"Bearer {STABILITY_API_KEY}",
+            "Accept": "image/*",
+           
+        }
+
+        
+
+        files = {
+            "none": ("none", "")  
+        }
+        data_form = {
+            "prompt": prompt,
+            "output_format": "webp",
+           
+        }
+
+        response = requests.post(url, headers=headers, files=files, data=data_form)
+
+        if response.status_code != 200:
+            try:
+                error_info = response.json()
+            except Exception:
+                error_info = response.text
+            print(f"API returned error {response.status_code}: {error_info}")
+            response.raise_for_status()
+
+        # The response content is the binary image file
+        base64_image = base64.b64encode(response.content).decode("utf-8")
+        image_data_uri = f"data:image/webp;base64,{base64_image}"
+
+        return {"image_url": image_data_uri}
+
     except Exception as e:
-        print("Error in generate_image:", e)
-        raise HTTPException(status_code=500, detail=str(e))
+        tb = traceback.format_exc()
+        print(f"Error during /generate-image: {e}\nTraceback:\n{tb}")
+        return {"error": str(e), "traceback": tb}

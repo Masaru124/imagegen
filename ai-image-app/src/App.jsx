@@ -1,107 +1,162 @@
-import { useState } from "react";
-import axios from "axios";
+import React, { useState } from "react";
 
-function App() {
-  const [inputs, setInputs] = useState({
+export default function AIImageGenerator() {
+  const [formData, setFormData] = useState({
     mood: "",
     style: "",
     location: "",
     time: "",
     elements: "",
   });
-  const [refinedPrompt, setRefinedPrompt] = useState("");
-  const [imageURL, setImageURL] = useState("");
-  const [loadingPrompt, setLoadingPrompt] = useState(false);
-  const [loadingImage, setLoadingImage] = useState(false);
+
+  const [imageUrl, setImageUrl] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleChange = (e) => {
-    setInputs({ ...inputs, [e.target.name]: e.target.value });
+    setFormData((prev) => ({
+      ...prev,
+      [e.target.name]: e.target.value,
+    }));
   };
 
-  const handleSubmit = async () => {
-    setLoadingPrompt(true);
-    try {
-      const res = await axios.post(
-        "http://127.0.0.1:8000/refine-prompt",
-        inputs
-      );
-      setRefinedPrompt(res.data.refined_prompt);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to refine prompt.");
-    }
-    setLoadingPrompt(false);
-  };
+  const canGenerate =
+    formData.mood &&
+    formData.style &&
+    formData.location &&
+    formData.time &&
+    !loading;
 
   const generateImage = async () => {
-    setLoadingImage(true);
+    setLoading(true);
+    setImageUrl("");
     try {
-      const res = await axios.post("http://127.0.0.1:8000/generate-image", {
-        prompt: refinedPrompt,
+      const response = await fetch("http://localhost:8000/generate-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
       });
-      setImageURL(res.data.image_url);
-    } catch (err) {
-      console.error(err);
-      alert("Image generation failed.");
+      const data = await response.json();
+
+      if (data.image_url) {
+        setImageUrl(data.image_url); // This is a base64 data URL now
+      } else {
+        alert("No image returned");
+      }
+    } catch (error) {
+      alert("Failed to generate image");
     }
-    setLoadingImage(false);
+    setLoading(false);
   };
 
   return (
-    <div className="p-6 max-w-xl mx-auto space-y-4 font-sans">
-      <h1 className="text-3xl font-bold text-center mb-6">
-        🧠 AI Image Generator
+    <div className="max-w-xl mx-auto p-6 bg-white shadow-md rounded-md mt-10">
+      <h1 className="text-3xl font-semibold mb-6 text-center">
+        AI Image Generator
       </h1>
 
-      {["mood", "style", "location", "time", "elements"].map((field) => (
-        <input
-          key={field}
-          name={field}
-          value={inputs[field]}
-          onChange={handleChange}
-          placeholder={field[0].toUpperCase() + field.slice(1)}
-          className="block w-full border p-2 rounded mb-2"
-        />
-      ))}
+      <div className="space-y-4">
+        {/* ... input fields unchanged ... */}
+        <div>
+          <label htmlFor="mood" className="block font-medium mb-1">
+            Mood <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            id="mood"
+            name="mood"
+            value={formData.mood}
+            onChange={handleChange}
+            placeholder="e.g. mysterious"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            required
+          />
+        </div>
+
+        <div>
+          <label htmlFor="style" className="block font-medium mb-1">
+            Style <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            id="style"
+            name="style"
+            value={formData.style}
+            onChange={handleChange}
+            placeholder="e.g. cyberpunk"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            required
+          />
+        </div>
+
+        <div>
+          <label htmlFor="location" className="block font-medium mb-1">
+            Location <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            id="location"
+            name="location"
+            value={formData.location}
+            onChange={handleChange}
+            placeholder="e.g. underground city"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            required
+          />
+        </div>
+
+        <div>
+          <label htmlFor="time" className="block font-medium mb-1">
+            Time <span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            id="time"
+            name="time"
+            value={formData.time}
+            onChange={handleChange}
+            placeholder="e.g. night"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            required
+          />
+        </div>
+
+        <div>
+          <label htmlFor="elements" className="block font-medium mb-1">
+            Elements (comma separated)
+          </label>
+          <input
+            type="text"
+            id="elements"
+            name="elements"
+            value={formData.elements}
+            onChange={handleChange}
+            placeholder="e.g. neon lights, robots, fog"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+        </div>
+      </div>
 
       <button
-        onClick={handleSubmit}
-        className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 w-full"
+        onClick={generateImage}
+        disabled={!canGenerate}
+        className={`mt-6 w-full py-3 rounded-md text-white font-semibold ${
+          canGenerate
+            ? "bg-indigo-600 hover:bg-indigo-700"
+            : "bg-gray-400 cursor-not-allowed"
+        }`}
       >
-        {loadingPrompt ? "Refining..." : "Generate Prompt"}
+        {loading ? "Generating..." : "Generate Image"}
       </button>
 
-      {refinedPrompt && (
-        <div className="mt-4 p-4 bg-gray-100 rounded">
-          <p className="font-semibold">🎨 Refined Prompt:</p>
-          <p>{refinedPrompt}</p>
-        </div>
-      )}
-
-      {refinedPrompt && (
-        <button
-          onClick={generateImage}
-          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 w-full mt-2"
-        >
-          {loadingImage ? "Generating Image..." : "Generate Image"}
-        </button>
-      )}
-
-      {imageURL && (
-        <div className="mt-4">
-          <p className="font-semibold">🖼️ Generated Image:</p>
-          <img src={imageURL} alt="Generated" className="rounded mt-2" />
-          <a
-            href={imageURL}
-            download
-            className="text-blue-600 underline block mt-2"
-          >
-            Download Image
-          </a>
+      {imageUrl && (
+        <div className="mt-8">
+          <img
+            src={imageUrl}
+            alt="Generated"
+            className="w-full rounded-md shadow-md"
+          />
         </div>
       )}
     </div>
   );
 }
-
-export default App;
